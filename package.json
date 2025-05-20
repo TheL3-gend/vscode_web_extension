@@ -1,0 +1,32 @@
+{
+  "name": "vscode-chatgpt-web-extension",
+  "version": "0.1.2-beta",
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "ChatGPT Web Integration",
+      "properties": {
+        "chatgpt-web.executablePath": { "type": "string", "default": "", "description": "Path to Chrome/Chromium." },
+        "chatgpt-web.headless": { "type": "boolean", "default": true },
+        "chatgpt-web.launchArgs": { "type": "array", "items": { "type": "string" }, "default": ["--no-sandbox","--disable-dev-shm-usage"] },
+        "chatgpt-web.retry.maxRetries": { "type": "number", "default": 3 },
+        "chatgpt-web.retry.delay": { "type": "number", "default": 1000 },
+        "chatgpt-web.selectors.promptTextarea": { "type": "string", "default": "[data-testid=\"prompt-textarea\"]" },
+        "chatgpt-web.selectors.completionIndicator": { "type": "string", "default": "[data-testid=\"regenerate-response-button\"]" },
+        "chatgpt-web.selectors.responseContainer": { "type": "string", "default": "div.markdown" },
+        "chatgpt-web.timeouts.initialLoad": { "type": "number", "default": 20000 },
+        "chatgpt-web.timeouts.response": { "type": "number", "default": 60000 },
+        "chatgpt-web.maxFiles": { "type": "number", "default": 100 }
+      }
+    },
+    "commands": [
+      { "command": "chatgpt-web.ask", "title": "ChatGPT Web: Ask" },
+      { "command": "chatgpt-web.insert", "title": "ChatGPT Web: Insert" }
+    ]
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.8.2",
+    "jsdom": "^22.0.0",
+    "markdown-it": "^13.0.0"
+  }
+}
