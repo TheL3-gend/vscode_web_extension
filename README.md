@@ -21,7 +21,7 @@
 
 1. Clone or download this repo.
 2. Run `npm install`.
-3. Compile: `npm run compile`.
+3. Build: `npm run build`.
 4. In VS Code, press **F5** to open the Extension Development Host.
 5. Use the commands from the **Command Palette**:
    - **ChatGPT Web: Ask** 
