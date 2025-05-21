@@ -28,5 +28,13 @@
     "puppeteer-core": "^24.8.2",
     "jsdom": "^22.0.0",
     "markdown-it": "^13.0.0"
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "build": "npm install && npm run compile"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.2",
+    "@types/node": "^20.14.8"
   }
 }
