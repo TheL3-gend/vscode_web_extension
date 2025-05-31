@@ -1,116 +1,110 @@
 import * as vscode from 'vscode';
-import { PuppeteerManager } from './PuppeteerManager';
-import { ResponseParser } from './ResponseParser';
-import { VSCodeCommander, IVSCodeCommander } from './VSCodeCommander';
 import { UIManager, IUIManager } from './UIManager';
-
-let puppeteerManager: PuppeteerManager | undefined;
-let uiManager: IUIManager | undefined;
+import { PuppeteerManager, IPuppeteerManager } from './PuppeteerManager';
+import { ResponseParser, IResponseParser, ParsedResponse } from './ResponseParser';
+import { VSCodeCommander, IVSCodeCommander, VSCodeCommand, CommandExecutionResult } from './VSCodeCommander';
 
 export function activate(context: vscode.ExtensionContext) {
-  uiManager = new UIManager();
-  uiManager.logOutput('ChatGPT Web Extension activating...');
-
+  // Instantiate managers
+  const uiManager: IUIManager = new UIManager();
+  const puppeteerManager: IPuppeteerManager = new PuppeteerManager(uiManager);
+  const responseParser: IResponseParser = new ResponseParser();
   const commander: IVSCodeCommander = new VSCodeCommander();
 
-  // Initialize PuppeteerManager lazily
-  const getPuppeteerManager = async (): Promise<PuppeteerManager> => {
-    if (!puppeteerManager || !puppeteerManager.isBrowserConnected()) {
-        if (uiManager) uiManager.showStatusBarMessage('Initializing ChatGPT browser...', true);
-        puppeteerManager = new PuppeteerManager(uiManager); // Pass UIManager for logging
-        try {
-            await puppeteerManager.initialize();
-            if (uiManager) uiManager.showStatusBarMessage('ChatGPT browser initialized.', false);
-        } catch (initError: unknown) {
-            if (uiManager) {
-                const errMsg = initError instanceof Error ? initError.message : String(initError);
-                uiManager.logOutput(`Puppeteer initialization failed: ${errMsg}`);
-                vscode.window.showErrorMessage(`Failed to initialize ChatGPT browser: ${errMsg}. Please check settings (e.g., executablePath) and ensure you can access chat.openai.com.`);
-                uiManager.showStatusBarMessage('Initialization failed.', false);
-            }
-            throw initError; // Re-throw to stop command execution
-        }
-    }
-    return puppeteerManager;
-  };
-
-  const askOrInsertCommand = async (isInsertMode: boolean) => {
-    if (!uiManager) {
-        console.error("UIManager not initialized in askOrInsertCommand");
-        return;
-    }
-
-    const prompt = await uiManager.getUserInput(isInsertMode ? 'Enter prompt for insertion' : 'Enter your prompt for ChatGPT');
-    if (!prompt) return;
-
-    uiManager.showStatusBarMessage('ChatGPT: Thinking…', true);
+  // Register "Ask" command
+  const askDisposable = vscode.commands.registerCommand('chatgpt-web.ask', async () => {
     try {
-      const currentPuppeteerManager = await getPuppeteerManager();
-      uiManager.logOutput(`Sending prompt (insert: ${isInsertMode}): "${prompt}"`);
-      
-      const htmlResponse = await currentPuppeteerManager.sendPrompt(prompt);
-      uiManager.logOutput('Received HTML response from ChatGPT.');
+      uiManager.showStatusBarMessage('Initializing ChatGPT...', true);
+      await puppeteerManager.initialize();
 
-      const parser = new ResponseParser(); // Create parser instance here
-      const parsedResponse = parser.parse(htmlResponse);
-      uiManager.logOutput(`Parsed response. Text length: ${parsedResponse.text.length}, Commands: ${parsedResponse.commands.length}`);
+      const userPrompt = await uiManager.getUserInput('Ask ChatGPT:');
+      if (!userPrompt) {
+        uiManager.showStatusBarMessage('No prompt provided.', false, 3000);
+        return;
+      }
 
-      if (parsedResponse.commands && parsedResponse.commands.length > 0) {
-        uiManager.logOutput(`Executing ${parsedResponse.commands.length} command(s) from ChatGPT...`);
-        for (const command of parsedResponse.commands) {
-          uiManager.logOutput(`Executing command: ${command.action} with params: ${JSON.stringify(command.params)}`);
-          const result = await commander.execute(command);
-          if (result.success) {
-            uiManager.logOutput(`Successfully executed '${command.action}'. Output: ${result.output ? JSON.stringify(result.output) : 'N/A'}`);
-          } else {
-            uiManager.logOutput(`Failed to execute command '${command.action}': ${result.error}`);
-            vscode.window.showWarningMessage(`ChatGPT command '${command.action}' failed: ${result.error}`);
-          }
+      uiManager.showStatusBarMessage('Sending prompt to ChatGPT...', true);
+      const htmlResponse = await puppeteerManager.sendPrompt(userPrompt);
+
+      uiManager.showStatusBarMessage('Parsing response...', true);
+      const parsed: ParsedResponse = responseParser.parse(htmlResponse);
+
+      // First, execute any VSCodeCommand(s) embedded
+      if (parsed.commands.length > 0) {
+        for (const cmd of parsed.commands) {
+          uiManager.logOutput(`Executing VSCodeCommand: ${JSON.stringify(cmd)}`);
+          const result: CommandExecutionResult = await commander.execute(cmd);
+          uiManager.logOutput(`Result of ${cmd.action}: success=${result.success}, error=${result.error ?? 'none'}`);
         }
       }
 
-      if (isInsertMode) {
-        await uiManager.insertIntoEditor(parsedResponse.text);
-        uiManager.logOutput('Inserted response into editor.');
-        vscode.window.showInformationMessage('ChatGPT response inserted.');
-      } else {
-        uiManager.showResponseWebview(parsedResponse.text, "ChatGPT Response");
-        uiManager.logOutput('Displayed response in webview.');
-      }
-
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      uiManager.logOutput(`Error during ChatGPT interaction: ${errMsg}`);
-      vscode.window.showErrorMessage(`ChatGPT request failed: ${errMsg}`);
-    } finally {
-      uiManager.showStatusBarMessage('ChatGPT: Ready', false);
-      setTimeout(() => { // Clear status bar after a few seconds if it's just "Ready"
-        if (uiManager && uiManager.getCurrentStatusBarText() === 'ChatGPT: Ready') {
-            uiManager.clearStatusBarMessage();
-        }
-      }, 5000);
+      // Then show the textual response in a Webview
+      uiManager.showResponseWebview(parsed.text, 'ChatGPT Web Response');
+      uiManager.showStatusBarMessage('ChatGPT response displayed.', false, 3000);
+    } catch (error: any) {
+      uiManager.logOutput(`Error in chatgpt-web.ask: ${error.message || String(error)}`);
+      vscode.window.showErrorMessage(`ChatGPT Web Error: ${error.message || String(error)}`);
+      uiManager.showStatusBarMessage('Error occurred. Check output channel.', false, 5000);
     }
-  };
+  });
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('chatgpt-web.ask', () => askOrInsertCommand(false)),
-    vscode.commands.registerCommand('chatgpt-web.insert', () => askOrInsertCommand(true))
-  );
+  // Register "Insert" command
+  const insertDisposable = vscode.commands.registerCommand('chatgpt-web.insert', async () => {
+    try {
+      uiManager.showStatusBarMessage('Initializing ChatGPT...', true);
+      await puppeteerManager.initialize();
 
-  uiManager.logOutput('ChatGPT Web Extension activated.');
+      const userPrompt = await uiManager.getUserInput('Ask ChatGPT (insert response into editor):');
+      if (!userPrompt) {
+        uiManager.showStatusBarMessage('No prompt provided.', false, 3000);
+        return;
+      }
+
+      uiManager.showStatusBarMessage('Sending prompt to ChatGPT...', true);
+      const htmlResponse = await puppeteerManager.sendPrompt(userPrompt);
+
+      uiManager.showStatusBarMessage('Parsing response...', true);
+      const parsed: ParsedResponse = responseParser.parse(htmlResponse);
+
+      // Execute embedded commands first
+      if (parsed.commands.length > 0) {
+        for (const cmd of parsed.commands) {
+          uiManager.logOutput(`Executing VSCodeCommand: ${JSON.stringify(cmd)}`);
+          const result: CommandExecutionResult = await commander.execute(cmd);
+          uiManager.logOutput(`Result of ${cmd.action}: success=${result.success}, error=${result.error ?? 'none'}`);
+        }
+      }
+
+      // Insert all codeBlocks (concatenate them) or fallback to text
+      let toInsert = '';
+      if (parsed.codeBlocks.length > 0) {
+        parsed.codeBlocks.forEach((cb) => {
+          // Wrap in triple backticks if a language is provided
+          if (cb.language) {
+            toInsert += `\`\`\`${cb.language}\n${cb.code}\n\`\`\`\n\n`;
+          } else {
+            toInsert += `\`\`\`\n${cb.code}\n\`\`\`\n\n`;
+          }
+        });
+      } else {
+        // Just insert the plain text
+        toInsert = parsed.text;
+      }
+
+      await uiManager.insertIntoEditor(toInsert);
+      uiManager.showStatusBarMessage('Inserted ChatGPT response into editor.', false, 3000);
+    } catch (error: any) {
+      uiManager.logOutput(`Error in chatgpt-web.insert: ${error.message || String(error)}`);
+      vscode.window.showErrorMessage(`ChatGPT Web Error: ${error.message || String(error)}`);
+      uiManager.showStatusBarMessage('Error occurred. Check output channel.', false, 5000);
+    }
+  });
+
+  context.subscriptions.push(askDisposable, insertDisposable, {
+    dispose: () => uiManager.dispose(),
+  });
 }
 
-export async function deactivate() {
-  if (uiManager) {
-    uiManager.logOutput('ChatGPT Web Extension deactivating...');
-  }
-  if (puppeteerManager) {
-    await puppeteerManager.closeBrowser();
-    if (uiManager) {
-        uiManager.logOutput('Puppeteer browser closed.');
-    }
-  }
-  if (uiManager) {
-    uiManager.dispose(); // Clean up UI resources like status bar
-  }
+export function deactivate() {
+  // Nothing special to clean up for now
 }

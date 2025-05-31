@@ -38,7 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PuppeteerManager = void 0;
 const vscode = __importStar(require("vscode"));
-const puppeteer_core_1 = __importDefault(require("puppeteer-core"));
+const puppeteer_1 = __importDefault(require("puppeteer"));
 class PuppeteerManager {
     constructor(uiManager) {
         this.browser = null;
@@ -101,7 +101,7 @@ class PuppeteerManager {
                 await vscode.workspace.fs.stat(vscode.Uri.file(this.executablePath));
                 exists = true;
             }
-            catch {
+            catch (_e) {
                 exists = false;
             }
             if (!exists) {
@@ -114,17 +114,11 @@ class PuppeteerManager {
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 this.log(`Initialize attempt ${attempt}/${this.maxRetries}...`);
-                const launchOptions = {
-                    headless: this.headless,
-                    executablePath: this.executablePath,
-                    args: this.launchArgs,
-                };
-                // If headless is false, and no executablePath is set, Puppeteer might not find Chrome.
-                // Consider adding userDataDir for persistent login if headless is false.
-                // if (!this.headless) {
-                //   // launchOptions.userDataDir = context.globalStorageUri.fsPath; // Example path
-                // }
-                this.browser = await puppeteer_core_1.default.launch(launchOptions);
+                // Build launchOptions with or without executablePath
+                const launchOptions = this.executablePath
+                    ? { headless: this.headless, args: this.launchArgs, executablePath: this.executablePath }
+                    : { headless: this.headless, args: this.launchArgs };
+                this.browser = await puppeteer_1.default.launch(launchOptions);
                 this.browser.on('disconnected', () => {
                     this.log('Browser disconnected.', 'warn');
                     this.initialized = false;
@@ -146,7 +140,7 @@ class PuppeteerManager {
                 const errMsg = error instanceof Error ? error.message : String(error);
                 this.log(`Initialization attempt ${attempt} failed: ${errMsg}`, 'error');
                 if (this.browser) {
-                    await this.browser.close().catch(e => this.log(`Error closing browser during failed init: ${e instanceof Error ? e.message : String(e)}`, 'error'));
+                    await this.browser.close().catch((e) => this.log(`Error closing browser during failed init: ${e instanceof Error ? e.message : String(e)}`, 'error'));
                     this.browser = null;
                     this.page = null;
                 }

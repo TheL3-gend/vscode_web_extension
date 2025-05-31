@@ -3,39 +3,84 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ResponseParser = void 0;
 const jsdom_1 = require("jsdom");
 class ResponseParser {
-    parse(html) {
-        const dom = new jsdom_1.JSDOM(`<body>${html}</body>`).window.document;
-        const text = Array.from(dom.querySelectorAll('p, li'))
-            .map(e => e.textContent?.trim() || '')
-            .filter(Boolean)
-            .join('\n\n');
-        const codeBlocks = Array.from(dom.querySelectorAll('pre > code'))
-            .map(e => {
-            const m = e.className.match(/language-(\w+)/);
-            return { language: m?.[1] || '', code: e.textContent || '' };
-        });
-        const combined = text + codeBlocks.map(cb => `\n\n\`\`\`${cb.language}\n${cb.code}\n\`\`\``).join('');
-        return { text, codeBlocks, commands: this.parseCommands(combined) };
-    }
-    parseCommands(str) {
-        const cmds = [];
-        const re = /\[VSCODE_COMMAND:(\w+)=['"]([^'"]+)['"]([^]*?)\]/g;
-        let m;
-        while ((m = re.exec(str))) {
-            const [, action, payload, rest = ''] = m;
-            const params = { arg: payload };
-            if (action === 'writeFile') {
-                params.path = payload;
-                delete params.arg;
-            }
-            const kvRe = /\b(\w+)='([^']*)'/g;
-            let kv;
-            while ((kv = kvRe.exec(rest))) {
-                params[kv[1]] = kv[2];
-            }
-            cmds.push({ action, params });
+    parse(htmlResponseContent) {
+        if (!htmlResponseContent || typeof htmlResponseContent !== 'string') {
+            console.warn('ResponseParser: Received empty or invalid HTML content.');
+            return { text: '', codeBlocks: [], commands: [] };
         }
-        return cmds;
+        // Wrap the HTML so we can parse it
+        const dom = new jsdom_1.JSDOM(`<!DOCTYPE html><body>${htmlResponseContent}</body>`).window.document;
+        const responseRoot = dom.body.firstElementChild || dom.body;
+        let fullTextPieces = [];
+        const codeBlocks = [];
+        const commands = [];
+        // Walk through child nodes in order to preserve text + code structure
+        responseRoot.childNodes.forEach((node) => {
+            if (node.nodeType === node.TEXT_NODE) {
+                // Plain text node
+                const txt = node.textContent || '';
+                fullTextPieces.push(txt);
+            }
+            else if (node.nodeType === node.ELEMENT_NODE) {
+                const element = node;
+                // Handle code blocks: <pre><code class="language-xxx">...</code></pre>
+                if (element.tagName === 'PRE') {
+                    const codeElem = element.querySelector('code');
+                    if (codeElem) {
+                        // Determine language from class="language-xxx"
+                        const className = codeElem.getAttribute('class') || '';
+                        const langMatch = className.match(/language-(\w+)/);
+                        const language = langMatch ? langMatch[1] : '';
+                        const codeText = codeElem.textContent || '';
+                        codeBlocks.push({ language, code: codeText });
+                        // If it's JSON, try to parse into a VSCodeCommand
+                        if (language.toLowerCase() === 'json') {
+                            try {
+                                const parsed = JSON.parse(codeText);
+                                // If parsed is an array of commands or single command
+                                if (Array.isArray(parsed)) {
+                                    parsed.forEach((entry) => {
+                                        if (typeof entry === 'object' &&
+                                            typeof entry.action === 'string' &&
+                                            typeof entry.params === 'object') {
+                                            commands.push({ action: entry.action, params: entry.params });
+                                        }
+                                    });
+                                }
+                                else if (typeof parsed === 'object' &&
+                                    typeof parsed.action === 'string' &&
+                                    typeof parsed.params === 'object') {
+                                    commands.push({ action: parsed.action, params: parsed.params });
+                                }
+                            }
+                            catch {
+                                // If JSON.parse fails, just ignore
+                            }
+                        }
+                        // Add a placeholder in the text so final "text" does not contain the raw code again
+                        fullTextPieces.push(`\n\n[Code block in ${language} omitted]\n\n`);
+                    }
+                    else {
+                        // <pre> without <code>—treat innerText as fallback
+                        const fallbackText = element.textContent || '';
+                        fullTextPieces.push(fallbackText);
+                    }
+                }
+                // Handle inline code: <code>...</code> outside of a <pre>
+                else if (element.tagName === 'CODE' && !element.parentElement?.tagName.match(/PRE/)) {
+                    const inline = element.textContent || '';
+                    fullTextPieces.push(inline);
+                }
+                // Handle paragraphs, lists, etc.
+                else {
+                    // For any other element (p, div, span, etc.), use its textContent
+                    const txt = element.textContent || '';
+                    fullTextPieces.push(txt);
+                }
+            }
+        });
+        const combinedText = fullTextPieces.join('').trim();
+        return { text: combinedText, codeBlocks, commands };
     }
 }
 exports.ResponseParser = ResponseParser;

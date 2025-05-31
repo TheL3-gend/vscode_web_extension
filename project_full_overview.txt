@@ -1,0 +1,1183 @@
+Project: vscode-chatgpt-web-extension
+Date: 2025-05-31
+
+---
+
+# File: package.json
+
+{
+  "name": "vscode-chatgpt-web-extension",
+  "version": "0.1.3-beta",
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "ChatGPT Web Integration",
+      "properties": {
+        "chatgpt-web.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Chrome/Chromium executable. If empty, Puppeteer tries to find a bundled version or a system-installed Chrome."
+        },
+        "chatgpt-web.headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Launch browser in headless mode. Set to false for debugging or if login is required."
+        },
+        "chatgpt-web.launchArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "--no-sandbox",
+            "--disable-dev-shm-usage"
+          ],
+          "description": "Additional arguments to pass to the browser instance."
+        },
+        "chatgpt-web.retry.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum number of retries for Puppeteer operations."
+        },
+        "chatgpt-web.retry.delay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Delay (in ms) between retries for Puppeteer operations."
+        },
+        "chatgpt-web.selectors.promptTextarea": {
+          "type": "string",
+          "default": "[data-testid=\"prompt-textarea\"]",
+          "description": "CSS selector for the ChatGPT prompt input textarea."
+        },
+        "chatgpt-web.selectors.completionIndicator": {
+          "type": "string",
+          "default": "[data-testid=\"regenerate-response-button\"]",
+          "description": "CSS selector for an element indicating ChatGPT has finished generating a response (e.g., regenerate button)."
+        },
+        "chatgpt-web.selectors.responseContainer": {
+          "type": "string",
+          "default": "div.markdown",
+          "description": "CSS selector for the container holding ChatGPT's last response (should target a div whose innerHTML is Markdown)."
+        },
+        "chatgpt-web.timeouts.initialLoad": {
+          "type": "number",
+          "default": 30000,
+          "description": "Timeout (in ms) for initial page load and login screen detection."
+        },
+        "chatgpt-web.timeouts.response": {
+          "type": "number",
+          "default": 60000,
+          "description": "Timeout (in ms) for waiting for ChatGPT to respond to a prompt."
+        },
+        "chatgpt-web.maxFiles": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of files to list for the 'getWorkspaceFiles' command."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "chatgpt-web.ask",
+        "title": "ChatGPT Web: Ask"
+      },
+      {
+        "command": "chatgpt-web.insert",
+        "title": "ChatGPT Web: Insert"
+      }
+    ]
+  },
+  "dependencies": {
+    "jsdom": "^24.0.0",
+    "markdown-it": "^14.1.0",
+    "puppeteer": "^22.15.0"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "build": "npm run compile",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/jsdom": "^21.1.7",
+    "@types/markdown-it": "^14.0.1",
+    "@types/node": "^20.12.12",
+    "@types/puppeteer": "^5.4.7",
+    "@types/vscode": "^1.89.0",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onCommand:chatgpt-web.ask",
+    "onCommand:chatgpt-web.insert"
+  ],
+  "displayName": "ChatGPT Web Assistant",
+  "description": "Interact with ChatGPT's web interface directly from VS Code and enable AI-driven VS Code commands."
+}
+
+---
+
+# File: tsconfig.json
+
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es2020",
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules",
+    ".vscode-test"
+  ]
+}
+
+---
+
+# File: README.md
+
+# VS Code ChatGPT Web Extension
+
+**Experimental** extension to drive the ChatGPT web interface directly from VS Code without an API key.
+
+## Features
+
+- Send prompts to ChatGPT from VS Code (`chatgpt-web.ask`).
+- Insert AI responses or code blocks directly into the editor (`chatgpt-web.insert`).
+- Execute AI‑driven commands:
+  - `readFile`
+  - `writeFile` (with user confirmation)
+  - `executeTerminal` (with user confirmation)
+  - `getWorkspaceFiles`
+  - `getDiagnostics`
+  - `getActiveFileInfo`
+  - `getSelection`
+- Logs human-readable system messages in the **ChatGPT Web** output channel.
+- Renders final AI responses in a Markdown‑powered Webview.
+
+## Installation
+
+1. Clone or download this repo.
+2. Run `npm install`.
+3. Build: `npm run build`.
+4. In VS Code, press **F5** to open the Extension Development Host.
+5. Use the commands from the **Command Palette**:
+   - **ChatGPT Web: Ask** 
+   - **ChatGPT Web: Insert**
+
+## Configuration
+
+Available in **Settings** (`chatgpt-web`):
+
+- `browserExecutablePath` (string): Path to Chrome/Chromium.
+- `headless` (boolean): Launch browser headless or headful.
+
+## Caveat
+
+This extension automates the ChatGPT web UI. If OpenAI changes their interface or selectors, it may break. Use as an experimental tool.
+
+## License
+
+MIT
+
+---
+
+# File: eslint.config.mjs
+
+import js from "@eslint/js";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+import { defineConfig } from "eslint/config";
+
+
+export default defineConfig([
+  { files: ["**/*.{js,mjs,cjs,ts,mts,cts}"], plugins: { js }, extends: ["js/recommended"] },
+  { files: ["**/*.{js,mjs,cjs,ts,mts,cts}"], languageOptions: { globals: globals.browser } },
+  tseslint.configs.recommended,
+]);
+
+---
+
+# File: jest.config.js
+
+const { createDefaultPreset } = require("ts-jest");
+
+const tsJestTransformCfg = createDefaultPreset().transform;
+
+/** @type {import("jest").Config} **/
+module.exports = {
+  testEnvironment: "node",
+  transform: {
+    ...tsJestTransformCfg,
+  },
+};
+
+---
+
+# File: .gitignore
+
+node_modules/
+out/
+*.vsix
+
+---
+
+# File: src/PuppeteerManager.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\PuppeteerManager.ts
+import * as vscode from 'vscode';
+import puppeteer, { Browser, Page, LaunchOptions } from 'puppeteer';
+import { IUIManager } from './UIManager'; // Import IUIManager
+
+export interface IPuppeteerManager {
+  initialize(): Promise<void>;
+  sendPrompt(prompt: string): Promise<string>;
+  closeBrowser(): Promise<void>;
+  isInitialized(): boolean;
+  isBrowserConnected(): boolean;
+}
+
+export class PuppeteerManager implements IPuppeteerManager {
+  private browser: Browser | null = null;
+  private page: Page | null = null;
+  private initialized = false;
+  private uiManager?: IUIManager; // Store UIManager instance
+
+  // Selectors from extension configuration
+  private promptTextareaSelector!: string;
+  private completionIndicatorSelector!: string;
+  private responseContainerSelector!: string;
+  
+  // Timeouts from extension configuration
+  private initialLoadTimeout!: number;
+  private responseTimeout!: number;
+
+  // Retry settings from extension configuration
+  private maxRetries!: number;
+  private retryDelay!: number;
+  
+  private executablePath: string | undefined;
+  private headless!: boolean; // Puppeteer's headless can be boolean
+  private launchArgs!: string[];
+
+
+  constructor(uiManager?: IUIManager) { // Accept UIManager
+    this.uiManager = uiManager;
+    this.loadConfiguration();
+  }
+
+  private loadConfiguration(): void {
+    const cfg = vscode.workspace.getConfiguration('chatgpt-web');
+    this.executablePath = cfg.get<string>('executablePath') || undefined; // undefined makes puppeteer use its default
+    // Use boolean or "shell" for headless, as supported by current Puppeteer version
+    const headlessConfig = cfg.get<boolean>('headless', true);
+    this.headless = headlessConfig ? true : false;
+    this.launchArgs = cfg.get<string[]>('launchArgs', ['--no-sandbox', '--disable-dev-shm-usage']);
+    
+    this.maxRetries = cfg.get<number>('retry.maxRetries', 3);
+    this.retryDelay = cfg.get<number>('retry.delay', 1000);
+    
+    this.promptTextareaSelector = cfg.get<string>('selectors.promptTextarea', '[data-testid="prompt-textarea"]');
+    this.completionIndicatorSelector = cfg.get<string>('selectors.completionIndicator', '[data-testid="regenerate-response-button"]');
+    // Ensure a valid default for responseContainer if the config is somehow empty
+    this.responseContainerSelector = cfg.get<string>('selectors.responseContainer') || 'div.markdown'; 
+    if (!this.responseContainerSelector) {
+        this.log('Warning: selectors.responseContainer is empty in config, using default "div.markdown".');
+        this.responseContainerSelector = 'div.markdown';
+    }
+
+
+    this.initialLoadTimeout = cfg.get<number>('timeouts.initialLoad', 30000);
+    this.responseTimeout = cfg.get<number>('timeouts.response', 60000);
+  }
+
+  private log(message: string, type: 'info' | 'error' | 'warn' = 'info'): void {
+    const fullMessage = `PuppeteerManager: ${message}`;
+    if (this.uiManager) {
+      this.uiManager.logOutput(fullMessage);
+    } else {
+      // Fallback to console if UIManager is not available (e.g., during early constructor phase)
+      if (type === 'error') console.error(fullMessage);
+      else if (type === 'warn') console.warn(fullMessage);
+      else console.log(fullMessage);
+    }
+  }
+
+  public isInitialized(): boolean {
+    return this.initialized && this.page !== null && this.browser !== null && this.isBrowserConnected();
+  }
+
+  public isBrowserConnected(): boolean {
+    return this.browser?.isConnected() || false;
+  }
+
+  public async initialize(): Promise<void> {
+    if (this.isInitialized()) {
+      this.log('Already initialized.');
+      return;
+    }
+    this.loadConfiguration(); // Reload config in case it changed
+
+    // Check for executable path if not using Puppeteer's bundled Chromium
+    if (this.executablePath) {
+      let exists = false;
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.file(this.executablePath));
+        exists = true;
+      } catch (_e: unknown) {
+        exists = false;
+      }
+      if (!exists) {
+        const errorMsg = `Chrome/Chromium executable not found at specified path: ${this.executablePath}. Please check 'chatgpt-web.executablePath' setting.`;
+        this.log(errorMsg, 'error');
+        throw new Error(errorMsg);
+      }
+    }
+    
+    this.log(`Attempting to launch browser (headless: ${this.headless}, path: ${this.executablePath || 'default'})`);
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        this.log(`Initialize attempt ${attempt}/${this.maxRetries}...`);
+        
+        // Build launchOptions with or without executablePath
+        const launchOptions = this.executablePath
+          ? { headless: this.headless, args: this.launchArgs, executablePath: this.executablePath }
+          : { headless: this.headless, args: this.launchArgs };
+
+        this.browser = await puppeteer.launch(launchOptions);
+        
+        this.browser.on('disconnected', () => {
+            this.log('Browser disconnected.', 'warn');
+            this.initialized = false;
+            this.browser = null;
+            this.page = null;
+            // Optionally, inform the user or attempt to re-initialize
+            vscode.window.showWarningMessage('ChatGPT browser session disconnected. You may need to re-run the command.');
+        });
+
+        this.page = await this.browser.newPage();
+        this.log('New page created. Navigating to chat.openai.com...');
+        
+        await this.page.goto('https://chat.openai.com', { waitUntil: 'networkidle2', timeout: this.initialLoadTimeout });
+        this.log('Navigation successful. Waiting for prompt textarea selector...');
+        
+        await this.page.waitForSelector(this.promptTextareaSelector, { timeout: this.initialLoadTimeout });
+        this.log('Prompt textarea found. Puppeteer initialized successfully.');
+        
+        this.initialized = true;
+        return;
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.log(`Initialization attempt ${attempt} failed: ${errMsg}`, 'error');
+        if (this.browser) {
+            await this.browser.close().catch((e: unknown) => this.log(`Error closing browser during failed init: ${e instanceof Error ? e.message : String(e)}`, 'error'));
+            this.browser = null;
+            this.page = null;
+        }
+        if (attempt === this.maxRetries) {
+          throw new Error(`Failed to initialize Puppeteer after ${this.maxRetries} attempts: ${errMsg}. Common issues: incorrect executablePath, network problems, or changes in OpenAI's website structure.`);
+        }
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+      }
+    }
+  }
+
+  public async sendPrompt(prompt: string): Promise<string> {
+    if (!this.isInitialized() || !this.page) { // Rely on isInitialized for full check
+      this.log('Not initialized or page is null. Attempting re-initialization.', 'warn');
+      await this.initialize(); // Attempt to re-initialize
+      if (!this.isInitialized() || !this.page) { // Check again after re-initialization attempt
+        throw new Error('PuppeteerManager is not initialized. Cannot send prompt.');
+      }
+    }
+    // Ensure page is not null after check (TypeScript compiler needs this)
+    const page = this.page!;
+
+    this.log(`Sending prompt. Length: ${prompt.length}`);
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        this.log(`Send prompt attempt ${attempt}/${this.maxRetries}...`);
+
+        await page.waitForSelector(this.promptTextareaSelector, { timeout: this.responseTimeout });
+        await page.focus(this.promptTextareaSelector);
+        
+        // Clear the textarea: Method 1 (JS evaluation)
+        await page.evaluate((selector: string) => {
+          const el = document.querySelector(selector) as HTMLTextAreaElement;
+          if (el) el.value = '';
+        }, this.promptTextareaSelector);
+        
+        // Clear the textarea: Method 2 (keyboard triple click + delete - sometimes more robust)
+        // await page.click(this.promptTextareaSelector, { clickCount: 3 });
+        // await page.keyboard.press('Backspace');
+
+        await page.type(this.promptTextareaSelector, prompt, { delay: 20 }); // Small delay can help with some UIs
+        
+        // Click the send button if Enter doesn't work or to be more explicit
+        // This assumes a send button selector exists. If not, Enter is fine.
+        // const sendButtonSelector = 'button[data-testid="send-button"]'; // Example
+        // await page.waitForSelector(sendButtonSelector, { timeout: 5000 });
+        // await page.click(sendButtonSelector);
+        // OR, if Enter key submits:
+        await page.keyboard.press('Enter');
+        this.log('Prompt submitted. Waiting for completion indicator...');
+
+        // Wait for the completion indicator (e.g., regenerate button appears or send button becomes active again)
+        await page.waitForSelector(this.completionIndicatorSelector, { timeout: this.responseTimeout });
+        this.log('Completion indicator found. Waiting for response container...');
+
+        // Additional short wait for content to fully render in the response container
+        await page.waitForFunction(
+            (selector: string) => document.querySelector(selector)?.innerHTML.trim() !== '',
+            { timeout: 10000 }, // Wait up to 10 seconds for content to appear
+            this.responseContainerSelector
+        );
+        this.log('Response container has content.');
+
+        // Get the last response element. ChatGPT often wraps responses in divs.
+        // This might need adjustment if the structure of chat.openai.com changes.
+        const htmlContent = await page.evaluate((selector: string) => {
+            const responseElements = Array.from(document.querySelectorAll(selector));
+            // Assuming the last element with class 'markdown' in the message list is the latest response.
+            // This selector might need to be more specific, e.g. within the last message group.
+            const lastResponseElement = responseElements.pop(); // Get the last one
+            return lastResponseElement ? lastResponseElement.innerHTML : '';
+        }, this.responseContainerSelector);
+        
+        if (!htmlContent) {
+            this.log('Response container found, but no HTML content extracted.', 'warn');
+            // This could happen if the selector is right but the element is empty.
+            // Or if the completion indicator appeared but the content isn't in the expected place.
+            // Retry if appropriate.
+            if (attempt < this.maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+                continue;
+            }
+            throw new Error('Response container found, but failed to extract HTML content.');
+        }
+
+        this.log(`Received response HTML. Length: ${htmlContent.length}`);
+        return htmlContent;
+
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.log(`Send prompt attempt ${attempt} failed: ${errMsg}`, 'error');
+        // Check if browser disconnected
+        if (!this.isBrowserConnected()) {
+            this.log('Browser disconnected during sendPrompt. Attempting to re-initialize.', 'warn');
+            this.initialized = false; // Force re-init on next call
+            throw new Error('Browser disconnected during operation. Please try again.');
+        }
+        if (attempt === this.maxRetries) {
+          throw new Error(`Failed to send prompt and get response after ${this.maxRetries} attempts: ${errMsg}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+      }
+    }
+    // Should not be reached if maxRetries is > 0, but as a fallback:
+    throw new Error('Failed to send prompt after all retries (unexpected).');
+  }
+
+  public async closeBrowser(): Promise<void> {
+    this.initialized = false;
+    if (this.browser) {
+      try {
+        this.log('Closing browser...');
+        await this.browser.close();
+        this.log('Browser closed successfully.');
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        this.log(`Error closing browser: ${errMsg}`, 'error');
+      } finally {
+        this.browser = null;
+        this.page = null;
+      }
+    } else {
+      this.log('Browser was not open or already closed.');
+    }
+  }
+}
+
+---
+
+# File: src/UIManager.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\UIManager.ts
+import * as vscode from 'vscode';
+import MarkdownIt from 'markdown-it';
+
+export interface IUIManager {
+  showStatusBarMessage(message: string, isLoading?: boolean, durationMs?: number): void;
+  clearStatusBarMessage(): void;
+  getCurrentStatusBarText(): string | undefined;
+  logOutput(message: string): void;
+  getUserInput(prompt: string, placeHolder?: string): Promise<string | undefined>;
+  showResponseWebview(markdownContent: string, title: string): void;
+  insertIntoEditor(text: string): Promise<void>;
+  dispose(): void; // For cleaning up resources
+}
+
+export class UIManager implements IUIManager {
+  private statusBarItem: vscode.StatusBarItem;
+  private outputChannel: vscode.OutputChannel;
+  private responsePanel: vscode.WebviewPanel | undefined;
+  private mdParser: MarkdownIt;
+  private statusBarTimeoutId: NodeJS.Timeout | undefined;
+
+
+  constructor() {
+    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    this.outputChannel = vscode.window.createOutputChannel('ChatGPT Web'); // Centralized channel name
+    this.mdParser = new MarkdownIt({ html: false, linkify: true, typographer: true }); // Configure Markdown-it
+    this.statusBarItem.show(); // Show it once created
+  }
+
+  public showStatusBarMessage(message: string, isLoading = false, durationMs?: number): void {
+    if (this.statusBarTimeoutId) {
+        clearTimeout(this.statusBarTimeoutId);
+        this.statusBarTimeoutId = undefined;
+    }
+    this.statusBarItem.text = isLoading ? `$(sync~spin) ${message}` : message;
+    this.statusBarItem.tooltip = message; // Add tooltip for longer messages
+    this.statusBarItem.show();
+
+    if (durationMs && durationMs > 0) {
+        this.statusBarTimeoutId = setTimeout(() => {
+            // Clear only if the message hasn't changed
+            if (this.statusBarItem.text === (isLoading ? `$(sync~spin) ${message}` : message)) {
+                this.clearStatusBarMessage();
+            }
+        }, durationMs);
+    }
+  }
+  
+  public clearStatusBarMessage(): void {
+      if (this.statusBarTimeoutId) {
+        clearTimeout(this.statusBarTimeoutId);
+        this.statusBarTimeoutId = undefined;
+      }
+      this.statusBarItem.text = '';
+      this.statusBarItem.tooltip = '';
+      //this.statusBarItem.hide(); // Optionally hide if completely empty
+  }
+
+  public getCurrentStatusBarText(): string | undefined {
+    return this.statusBarItem.text;
+  }
+
+  public logOutput(message: string): void {
+    const timestamp = new Date().toLocaleTimeString();
+    this.outputChannel.appendLine(`[${timestamp}] ${message}`);
+    // No need to explicitly show output channel on every log, user can open it.
+    // this.outputChannel.show(true); // Keep if you want it to pop up often
+  }
+
+  public getUserInput(prompt: string, placeHolder?: string): Promise<string | undefined> {
+    return Promise.resolve(vscode.window.showInputBox({
+      prompt,
+      placeHolder,
+      ignoreFocusOut: true, // Keep input box focused
+    }));
+  }
+
+  public showResponseWebview(markdownContent: string, title: string): void {
+    const htmlBody = this.mdParser.render(markdownContent);
+
+    if (this.responsePanel) {
+      this.responsePanel.title = title;
+      this.responsePanel.webview.html = this.getWebviewHtml(htmlBody, title);
+      this.responsePanel.reveal(vscode.ViewColumn.Beside, true);
+    } else {
+      this.responsePanel = vscode.window.createWebviewPanel(
+        'chatgptWebResponse', // Panel ID
+        title, // Panel title
+        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        {
+          enableScripts: false, // Keep scripts disabled for security unless explicitly needed
+          retainContextWhenHidden: true, // Keep content when tab is not visible
+          localResourceRoots: [] // No local resources needed for this basic HTML
+        }
+      );
+      this.responsePanel.webview.html = this.getWebviewHtml(htmlBody, title);
+      this.responsePanel.onDidDispose(() => {
+        this.responsePanel = undefined;
+      }, null);
+    }
+  }
+
+  private getWebviewHtml(bodyContent: string, pageTitle: string): string {
+    // Use VS Code's theme variables for styling
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://*.vscode-cdn.net; img-src https: data:; font-src https://*.vscode-cdn.net;">
+    <title>${pageTitle}</title>
+    <style>
+        body {
+            font-family: var(--vscode-font-family, Arial, sans-serif);
+            font-size: var(--vscode-font-size);
+            color: var(--vscode-editor-foreground);
+            background-color: var(--vscode-editor-background);
+            padding: 15px;
+            line-height: 1.6;
+        }
+        pre {
+            background-color: var(--vscode-text-block-quote-background, var(--vscode-editor-background)); /* Fallback for code block background */
+            border: 1px solid var(--vscode-text-block-quote-border, var(--vscode-editor-widget-border));
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: var(--vscode-editor-font-family, monospace); /* Monospace for code */
+        }
+        code {
+            font-family: var(--vscode-editor-font-family, monospace); /* Monospace for code */
+            background-color: var(--vscode-text-code-block-background, rgba(128, 128, 128, 0.1)); /* Subtle background for inline code */
+            padding: 0.2em 0.4em;
+            margin: 0 0.1em;
+            border-radius: 3px;
+            font-size: 0.9em; /* Slightly smaller for inline code */
+        }
+        pre > code { /* Reset for code inside pre, as pre handles styling */
+            padding: 0;
+            margin: 0;
+            border-radius: 0;
+            background-color: transparent;
+            font-size: 1em; /* Normal size inside pre */
+        }
+        a {
+            color: var(--vscode-text-link-foreground);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        p { margin-top: 0; margin-bottom: 1em; }
+        h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold; }
+        ul, ol { margin-bottom: 1em; padding-left: 2em; }
+        li { margin-bottom: 0.2em; }
+        blockquote {
+            margin-left: 0;
+            padding-left: 1em;
+            border-left: 3px solid var(--vscode-text-block-quote-border, #ccc);
+            color: var(--vscode-text-block-quote-foreground, var(--vscode-editor-foreground));
+            background-color: var(--vscode-text-block-quote-background, transparent);
+        }
+    </style>
+</head>
+<body>
+    <div>${bodyContent}</div>
+</body>
+</html>`;
+  }
+
+  public async insertIntoEditor(text: string): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showWarningMessage('No active text editor to insert into.');
+      return;
+    }
+    await editor.edit(editBuilder => {
+      if (editor.selection.isEmpty) {
+        editBuilder.insert(editor.selection.active, text);
+      } else {
+        // Replace selection if not empty
+        editBuilder.replace(editor.selection, text);
+      }
+    });
+  }
+
+  public dispose(): void {
+    this.statusBarItem.dispose();
+    this.outputChannel.dispose();
+    if (this.responsePanel) {
+      this.responsePanel.dispose();
+    }
+    if (this.statusBarTimeoutId) {
+        clearTimeout(this.statusBarTimeoutId);
+    }
+  }
+}
+
+---
+
+# File: src/ResponseParser.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\ResponseParser.ts
+import { JSDOM } from 'jsdom';
+import { VSCodeCommand } from './VSCodeCommander'; // Use the interface from VSCodeCommander
+
+// Renamed 'Command' to 'ParsedVSCodeCommand' to avoid conflict if VSCodeCommand itself is imported directly.
+// However, since we are using VSCodeCommand from './VSCodeCommander', we can align the names.
+// Let's stick to VSCodeCommand as it's defined in VSCodeCommander.ts
+
+export interface CodeBlock {
+  language: string;
+  code: string;
+}
+
+export interface ParsedResponse {
+  text: string; // The main textual response from ChatGPT
+  codeBlocks: CodeBlock[]; // Any extracted code blocks
+  commands: VSCodeCommand[]; // Parsed VSCODE_COMMANDs
+}
+
+export interface IResponseParser {
+  parse(htmlResponseContent: string): ParsedResponse;
+}
+
+export class ResponseParser implements IResponseParser {
+  public parse(htmlResponseContent: string): ParsedResponse {
+    if (!htmlResponseContent || typeof htmlResponseContent !== 'string') {
+        console.warn("ResponseParser: Received empty or invalid HTML content.");
+        return { text: '', codeBlocks: [], commands: [] };
+    }
+
+    // JSDOM can be slow. If performance is an issue, consider lighter regex-based parsing
+    // for simple cases, or a streaming HTML parser for complex content.
+    // For now, JSDOM is fine for typical ChatGPT response complexity.
+    const dom = new JSDOM(`<!DOCTYPE html><body>${htmlResponseContent}</body>`).window.document;
+    
+    let fullTextContent = '';
+    const codeBlocks: CodeBlock[] = [];
+
+    // Iterate through all direct children of the body (or a more specific response container if known)
+    // This aims to preserve the order of text and code blocks.
+    // The 'div.markdown' from PuppeteerManager often contains p, pre, ol, ul etc.
+    const responseRoot = dom.body.firstElementChild || dom.body; // Usually the div.markdown content
+
+    responseRoot.childNodes.forEach(node => {
+      if (node.nodeType === node.TEXT_NODE) {
+        fullTextContent += node.textContent;
+      } else if (node.nodeType === node.ELEMENT_NODE) {
+        const element = node as HTMLElement;
+        if (element.tagName === 'PRE') {
+          const codeElement = element.querySelector('code');
+          if (codeElement) {
+            const languageMatch = codeElement.className.match(/language-(\w+)/);
+            const language = languageMatch ? languageMatch[1] : '';
+            const code = codeElement.textContent || '';
+            codeBlocks.push({ language, code });
+            // Append a placeholder or the code block itself to fullTextContent for command parsing
+            fullTextContent += `\n\n\ 7F 7F${language}\n${code}\n\ 7F 7F 7F\n\n`;
+          } else {
+            // PRE tag without a CODE tag inside, treat as plain text
+            fullTextContent += element.textContent || '';
+          }
+        } else {
+          // For other elements (P, UL, OL, H1-6, BLOCKQUOTE, etc.), get their text content.
+          // JSDOM's textContent recursively gets text from children, which is good.
+          // Add newlines for block elements to maintain some structure.
+          const rawText = element.textContent || '';
+          if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'DIV'].includes(element.tagName)) {
+            fullTextContent += rawText + '\n\n';
+          } else {
+            fullTextContent += rawText;
+          }
+        }
+      }
+    });
+    
+    const cleanedFullText = fullTextContent.replace(/\n{3,}/g, '\n\n').trim();
+    const commands = this.parseCommands(cleanedFullText); // Parse commands from the combined text
+
+    // The 'text' field in ParsedResponse should be the "displayable" text,
+    // which might mean excluding the command syntax. For now, we use the cleaned full text.
+    // If commands should be hidden from the webview, filter them out here.
+    // For simplicity, current 'text' includes command syntax if it was part of the text.
+    // A better approach might be to have a separate "display_text" and "text_for_command_parsing".
+
+    return {
+      text: cleanedFullText, // This text will be rendered in Markdown.
+      codeBlocks,
+      commands
+    };
+  }
+
+  private parseCommands(str: string): VSCodeCommand[] {
+    const parsedCommands: VSCodeCommand[] = [];
+    // Regex to find [VSCODE_COMMAND: actionName param1="value1" param2='value2' content="multi
+    // line
+    // content"]
+    // Action is the first word. Params string follows.
+    const commandRegex = /\[VSCODE_COMMAND:\s*(\w+)\s+([^\]]+)\]/gs; // 's' flag for dot to match newlines in params
+    
+    let match;
+    while ((match = commandRegex.exec(str)) !== null) {
+      const action = match[1];
+      const paramsString = match[2];
+      const params: Record<string, string> = {};
+
+      // Regex to parse key="value" or key='value' or key=`value`
+      // Allows for escaped quotes within values.
+      const paramRegex = /(\w+)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|`((?:\\.|[^`\\])*)`)/g;
+      let paramMatch;
+      while ((paramMatch = paramRegex.exec(paramsString)) !== null) {
+        // paramMatch[2] for double quotes, [3] for single, [4] for backticks
+        const value = paramMatch[2] || paramMatch[3] || paramMatch[4] || '';
+        params[paramMatch[1]] = value.replace(/\\(["'`\\])/g, '$1'); // Unescape basic characters
+      }
+      
+      if (Object.keys(params).length > 0 || (action === 'getWorkspaceFiles' || action === 'getDiagnostics' || action === 'getActiveFileInfo' || action === 'getSelection')) {
+        // Ensure commands that might not have params are still added if the action name is valid
+         parsedCommands.push({ action, params });
+      } else if (action && !Object.keys(params).length) {
+        // If action is present but no params were parsed, it might be a param-less command.
+        // Or it could be a malformed params string. For now, we allow param-less commands.
+        const knownParamlessActions = ['getWorkspaceFiles', 'getDiagnostics', 'getActiveFileInfo', 'getSelection'];
+        if (knownParamlessActions.includes(action)) {
+            parsedCommands.push({ action, params: {} });
+        } else {
+            console.warn(`ResponseParser: Command action '${action}' found but no valid parameters parsed from '${paramsString}'. Skipping command.`);
+        }
+      }
+    }
+    return parsedCommands;
+  }
+}
+
+---
+
+# File: src/VSCodeCommander.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\VSCodeCommander.ts
+import * as vscode from 'vscode';
+
+export interface VSCodeCommand {
+  action: string;
+  // Ensure params can hold any string value, including empty strings or specific structure.
+  params: Record<string, unknown>; // Changed from Record<string, string> to Record<string, unknown> for flexibility
+}
+
+export interface CommandExecutionResult {
+  action: string;
+  success: boolean;
+  output?: unknown;
+  error?: string;
+}
+
+export interface IVSCodeCommander {
+  execute(cmd: VSCodeCommand): Promise<CommandExecutionResult>;
+}
+
+export class VSCodeCommander implements IVSCodeCommander {
+  private getWorkspaceUri(): vscode.Uri {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+      throw new Error('No workspace folder is currently open.');
+    }
+    return folders[0].uri;
+  }
+
+  private getFilePath(relativePath: string): vscode.Uri {
+    if (typeof relativePath !== 'string' || !relativePath.trim()) {
+        throw new Error("Path parameter is invalid or missing.");
+    }
+    try {
+        return vscode.Uri.joinPath(this.getWorkspaceUri(), relativePath);
+    } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        throw new Error(`Error constructing file path for "${relativePath}": ${errMsg}`);
+    }
+  }
+
+  public async execute(cmd: VSCodeCommand): Promise<CommandExecutionResult> {
+    try {
+      switch (cmd.action) {
+        case 'readFile': {
+          if (!cmd.params || typeof cmd.params.path !== 'string') {
+            return { action: cmd.action, success: false, error: "Missing or invalid 'path' parameter for readFile (must be a string)." };
+          }
+          const fileUri = this.getFilePath(cmd.params.path);
+          const fileContentBytes = await vscode.workspace.fs.readFile(fileUri);
+          const fileContent = Buffer.from(fileContentBytes).toString('utf8');
+          return { action: cmd.action, success: true, output: fileContent };
+        }
+
+        case 'writeFile': {
+          if (!cmd.params || typeof cmd.params.path !== 'string') {
+            return { action: cmd.action, success: false, error: "Missing or invalid 'path' parameter for writeFile (must be a string)." };
+          }
+          if (cmd.params.content === undefined || cmd.params.content === null) { // Allow empty string for content
+            return { action: cmd.action, success: false, error: "Missing 'content' parameter for writeFile." };
+          }
+          const contentString = String(cmd.params.content); // Ensure content is a string
+
+          const confirmWrite = await vscode.window.showWarningMessage(
+            `Allow ChatGPT to write to the file '${cmd.params.path}'?`,
+            { modal: true, detail: `Content preview (first 100 chars):\n${contentString.substring(0, 100)}...` },
+            'Yes', 'No'
+          );
+          if (confirmWrite !== 'Yes') {
+            return { action: cmd.action, success: false, error: "User denied file write operation." };
+          }
+          const fileUri = this.getFilePath(cmd.params.path);
+          await vscode.workspace.fs.writeFile(fileUri, Buffer.from(contentString, 'utf8'));
+          return { action: cmd.action, success: true, output: `File '${cmd.params.path}' written successfully.` };
+        }
+
+        case 'executeTerminal': {
+          if (!cmd.params || typeof cmd.params.command !== 'string') {
+            return { action: cmd.action, success: false, error: "Missing or invalid 'command' parameter for executeTerminal (must be a string)." };
+          }
+          const confirmTerminal = await vscode.window.showWarningMessage(
+            `Allow ChatGPT to execute the following command in the terminal?\n\nCommand: ${cmd.params.command}`,
+            { modal: true },
+            'Yes', 'No'
+          );
+          if (confirmTerminal !== 'Yes') {
+            return { action: cmd.action, success: false, error: "User denied terminal command execution." };
+          }
+          const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('ChatGPT');
+          terminal.show();
+          terminal.sendText(cmd.params.command, true); // true to execute immediately
+          return { action: cmd.action, success: true, output: "Command sent to terminal for execution." };
+        }
+
+        case 'getWorkspaceFiles': {
+          const maxFiles = vscode.workspace.getConfiguration('chatgpt-web').get<number>('maxFiles', 100);
+          const files = await vscode.workspace.findFiles('**/*', null, maxFiles);
+          const workspaceRootPath = this.getWorkspaceUri().fsPath;
+          const relativePaths = files.map(uri => {
+            if (uri.fsPath.startsWith(workspaceRootPath)) {
+                return vscode.workspace.asRelativePath(uri, false);
+            }
+            return uri.fsPath; // For files outside workspace, return full path
+          });
+          return { action: cmd.action, success: true, output: relativePaths };
+        }
+
+        case 'getDiagnostics': {
+          const diagnosticsEntries = vscode.languages.getDiagnostics(); // Returns [Uri, Diagnostic[]][]
+          const workspaceRootPath = this.getWorkspaceUri().fsPath;
+          const formattedDiagnostics = diagnosticsEntries.map(([uri, diagItems]) => ({
+            filePath: uri.fsPath.startsWith(workspaceRootPath) ? vscode.workspace.asRelativePath(uri, false) : uri.fsPath,
+            diagnostics: diagItems.map(d => ({
+              message: d.message,
+              severity: vscode.DiagnosticSeverity[d.severity], // Converts enum number to string
+              source: d.source,
+              code: d.code ? (typeof d.code === 'string' ? d.code : JSON.stringify(d.code)) : undefined,
+              range: {
+                startLine: d.range.start.line,
+                startChar: d.range.start.character,
+                endLine: d.range.end.line,
+                endChar: d.range.end.character,
+              }
+            }))
+          }));
+          return { action: cmd.action, success: true, output: formattedDiagnostics };
+        }
+
+        case 'getActiveFileInfo': {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            return { action: cmd.action, success: false, error: "No active text editor found." };
+          }
+          const document = editor.document;
+          const workspaceRootPath = this.getWorkspaceUri().fsPath;
+          return {
+            action: cmd.action,
+            success: true,
+            output: {
+              filePath: document.uri.fsPath.startsWith(workspaceRootPath) ? vscode.workspace.asRelativePath(document.uri, false) : document.uri.fsPath,
+              languageId: document.languageId,
+              lineCount: document.lineCount,
+              isDirty: document.isDirty,
+              isUntitled: document.isUntitled,
+              eol: document.eol === vscode.EndOfLine.CRLF ? 'CRLF' : 'LF',
+              version: document.version,
+            }
+          };
+        }
+
+        case 'getSelection': {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) {
+            return { action: cmd.action, success: false, error: "No active text editor found." };
+          }
+          if (editor.selection.isEmpty && (!cmd.params || cmd.params.allowEmpty !== true)) {
+            return { action: cmd.action, success: false, error: "No text selected. To allow, AI must send {allowEmpty:true}." };
+          }
+          const selection = editor.selection;
+          const selectedText = editor.document.getText(selection);
+          return {
+            action: cmd.action,
+            success: true,
+            output: {
+              selectedText: selectedText,
+              isEmpty: selection.isEmpty,
+              isSingleLine: selection.isSingleLine,
+              start: { line: selection.start.line, character: selection.start.character },
+              end: { line: selection.end.line, character: selection.end.character },
+              active: { line: selection.active.line, character: selection.active.character }, // Cursor position
+              anchor: { line: selection.anchor.line, character: selection.anchor.character } // Start of selection drag
+            }
+          };
+        }
+
+        default:
+          return { action: cmd.action, success: false, error: `Unknown or unsupported action: '${cmd.action}'.` };
+      }
+    } catch (error: unknown) {
+      console.error(`VSCodeCommander: Error executing command '${cmd.action}':`, error);
+      // Check if error is an instance of Error, otherwise stringify it
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { action: cmd.action, success: false, error: errorMessage };
+    }
+  }
+}
+
+---
+
+# File: src/extension.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\extension.ts
+import * as vscode from 'vscode';
+import { PuppeteerManager } from './PuppeteerManager';
+import { ResponseParser } from './ResponseParser';
+import { VSCodeCommander, IVSCodeCommander } from './VSCodeCommander';
+import { UIManager, IUIManager } from './UIManager';
+
+let puppeteerManager: PuppeteerManager | undefined;
+let uiManager: IUIManager | undefined;
+
+export function activate(context: vscode.ExtensionContext) {
+  uiManager = new UIManager();
+  uiManager.logOutput('ChatGPT Web Extension activating...');
+
+  const commander: IVSCodeCommander = new VSCodeCommander();
+
+  // Initialize PuppeteerManager lazily
+  const getPuppeteerManager = async (): Promise<PuppeteerManager> => {
+    if (!puppeteerManager || !puppeteerManager.isBrowserConnected()) {
+        if (uiManager) uiManager.showStatusBarMessage('Initializing ChatGPT browser...', true);
+        puppeteerManager = new PuppeteerManager(uiManager); // Pass UIManager for logging
+        try {
+            await puppeteerManager.initialize();
+            if (uiManager) uiManager.showStatusBarMessage('ChatGPT browser initialized.', false);
+        } catch (initError: unknown) {
+            if (uiManager) {
+                const errMsg = initError instanceof Error ? initError.message : String(initError);
+                uiManager.logOutput(`Puppeteer initialization failed: ${errMsg}`);
+                vscode.window.showErrorMessage(`Failed to initialize ChatGPT browser: ${errMsg}. Please check settings (e.g., executablePath) and ensure you can access chat.openai.com.`);
+                uiManager.showStatusBarMessage('Initialization failed.', false);
+            }
+            throw initError; // Re-throw to stop command execution
+        }
+    }
+    return puppeteerManager;
+  };
+
+  const askOrInsertCommand = async (isInsertMode: boolean) => {
+    if (!uiManager) {
+        console.error("UIManager not initialized in askOrInsertCommand");
+        return;
+    }
+
+    const prompt = await uiManager.getUserInput(isInsertMode ? 'Enter prompt for insertion' : 'Enter your prompt for ChatGPT');
+    if (!prompt) return;
+
+    uiManager.showStatusBarMessage('ChatGPT: Thinking…', true);
+    try {
+      const currentPuppeteerManager = await getPuppeteerManager();
+      uiManager.logOutput(`Sending prompt (insert: ${isInsertMode}): "${prompt}"`);
+      
+      const htmlResponse = await currentPuppeteerManager.sendPrompt(prompt);
+      uiManager.logOutput('Received HTML response from ChatGPT.');
+
+      const parser = new ResponseParser(); // Create parser instance here
+      const parsedResponse = parser.parse(htmlResponse);
+      uiManager.logOutput(`Parsed response. Text length: ${parsedResponse.text.length}, Commands: ${parsedResponse.commands.length}`);
+
+      if (parsedResponse.commands && parsedResponse.commands.length > 0) {
+        uiManager.logOutput(`Executing ${parsedResponse.commands.length} command(s) from ChatGPT...`);
+        for (const command of parsedResponse.commands) {
+          uiManager.logOutput(`Executing command: ${command.action} with params: ${JSON.stringify(command.params)}`);
+          const result = await commander.execute(command);
+          if (result.success) {
+            uiManager.logOutput(`Successfully executed '${command.action}'. Output: ${result.output ? JSON.stringify(result.output) : 'N/A'}`);
+          } else {
+            uiManager.logOutput(`Failed to execute command '${command.action}': ${result.error}`);
+            vscode.window.showWarningMessage(`ChatGPT command '${command.action}' failed: ${result.error}`);
+          }
+        }
+      }
+
+      if (isInsertMode) {
+        await uiManager.insertIntoEditor(parsedResponse.text);
+        uiManager.logOutput('Inserted response into editor.');
+        vscode.window.showInformationMessage('ChatGPT response inserted.');
+      } else {
+        uiManager.showResponseWebview(parsedResponse.text, "ChatGPT Response");
+        uiManager.logOutput('Displayed response in webview.');
+      }
+
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      uiManager.logOutput(`Error during ChatGPT interaction: ${errMsg}`);
+      vscode.window.showErrorMessage(`ChatGPT request failed: ${errMsg}`);
+    } finally {
+      uiManager.showStatusBarMessage('ChatGPT: Ready', false);
+      setTimeout(() => { // Clear status bar after a few seconds if it's just "Ready"
+        if (uiManager && uiManager.getCurrentStatusBarText() === 'ChatGPT: Ready') {
+            uiManager.clearStatusBarMessage();
+        }
+      }, 5000);
+    }
+  };
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('chatgpt-web.ask', () => askOrInsertCommand(false)),
+    vscode.commands.registerCommand('chatgpt-web.insert', () => askOrInsertCommand(true))
+  );
+
+  uiManager.logOutput('ChatGPT Web Extension activated.');
+}
+
+export async function deactivate() {
+  if (uiManager) {
+    uiManager.logOutput('ChatGPT Web Extension deactivating...');
+  }
+  if (puppeteerManager) {
+    await puppeteerManager.closeBrowser();
+    if (uiManager) {
+        uiManager.logOutput('Puppeteer browser closed.');
+    }
+  }
+  if (uiManager) {
+    uiManager.dispose(); // Clean up UI resources like status bar
+  }
+}
+
+---
+
+# File: src/sample.test.ts
+
+// filepath: c:\Users\ilgaz\Documents\Codes\GitHub\vscode_web_extension\src\sample.test.ts
+import { describe, expect, test } from '@jest/globals';
+
+describe('Sample Test', () => {
+  test('true is true', () => {
+    expect(true).toBe(true);
+  });
+});
+
+---
+
+(End of project files. All npm and node_modules are excluded.)

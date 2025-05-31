@@ -111,8 +111,6 @@
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onCommand:chatgpt-web.ask",
-    "onCommand:chatgpt-web.insert"
   ],
   "displayName": "ChatGPT Web Assistant",
   "description": "Interact with ChatGPT's web interface directly from VS Code and enable AI-driven VS Code commands."
