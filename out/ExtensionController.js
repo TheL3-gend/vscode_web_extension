@@ -51,15 +51,71 @@ function activate(context) {
         if (!prompt)
             return;
         ui.showStatusBarMessage('Sending…', true);
-        // ...
-        ui.showStatusBarMessage('', false);
+        try {
+            if (!puppeteerManager.isInitialized()) {
+                ui.showStatusBarMessage('Initializing ChatGPT...', true);
+                await puppeteerManager.initialize();
+            }
+            ui.showStatusBarMessage('Sending prompt to ChatGPT...', true);
+            const htmlResponse = await puppeteerManager.sendPrompt(prompt);
+            const parsedResponse = parser.parse(htmlResponse);
+            if (parsedResponse.commands && parsedResponse.commands.length > 0) {
+                ui.logOutput(`Executing ${parsedResponse.commands.length} command(s) from ChatGPT...`);
+                for (const command of parsedResponse.commands) {
+                    const result = await commander.execute(command);
+                    if (result.success) {
+                        ui.logOutput(`Executed command '${command.action}': ${JSON.stringify(result.output)}`);
+                    }
+                    else {
+                        ui.logOutput(`Failed to execute command '${command.action}': ${result.error}`);
+                        vscode.window.showWarningMessage(`Failed to execute command '${command.action}': ${result.error}`);
+                    }
+                }
+            }
+            ui.showResponseWebview(parsedResponse.text);
+        }
+        catch (error) {
+            ui.logOutput(`Error in 'ask' command: ${error}`);
+            vscode.window.showErrorMessage(`ChatGPT request failed: ${error.message || error}`);
+        }
+        finally {
+            ui.showStatusBarMessage('', false);
+        }
     }), vscode.commands.registerCommand('chatgpt-web.insert', async () => {
         const prompt = await ui.getUserInput('Enter prompt to insert');
         if (!prompt)
             return;
         ui.showStatusBarMessage('Sending…', true);
-        // ...
-        ui.showStatusBarMessage('', false);
+        try {
+            if (!puppeteerManager.isInitialized()) {
+                ui.showStatusBarMessage('Initializing ChatGPT...', true);
+                await puppeteerManager.initialize();
+            }
+            ui.showStatusBarMessage('Sending prompt to ChatGPT for insert...', true);
+            const htmlResponse = await puppeteerManager.sendPrompt(prompt);
+            const parsedResponse = parser.parse(htmlResponse);
+            if (parsedResponse.commands && parsedResponse.commands.length > 0) {
+                ui.logOutput(`Executing ${parsedResponse.commands.length} command(s) from ChatGPT for insert...`);
+                for (const command of parsedResponse.commands) {
+                    const result = await commander.execute(command);
+                    if (result.success) {
+                        ui.logOutput(`Executed command '${command.action}' for insert: ${JSON.stringify(result.output)}`);
+                    }
+                    else {
+                        ui.logOutput(`Failed to execute command '${command.action}' for insert: ${result.error}`);
+                        vscode.window.showWarningMessage(`Failed to execute command '${command.action}' for insert: ${result.error}`);
+                    }
+                }
+            }
+            await ui.insertIntoEditor(parsedResponse.text);
+        }
+        catch (error) {
+            ui.logOutput(`Error in 'insert' command: ${error}`);
+            vscode.window.showErrorMessage(`ChatGPT insert request failed: ${error.message || error}`);
+        }
+        finally {
+            ui.showStatusBarMessage('', false);
+        }
     }));
 }
 function deactivate() {

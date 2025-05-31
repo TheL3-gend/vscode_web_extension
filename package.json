@@ -6,38 +6,114 @@
     "configuration": {
       "title": "ChatGPT Web Integration",
       "properties": {
-        "chatgpt-web.executablePath": { "type": "string", "default": "", "description": "Path to Chrome/Chromium." },
-        "chatgpt-web.headless": { "type": "boolean", "default": true },
-        "chatgpt-web.launchArgs": { "type": "array", "items": { "type": "string" }, "default": ["--no-sandbox","--disable-dev-shm-usage"] },
-        "chatgpt-web.retry.maxRetries": { "type": "number", "default": 3 },
-        "chatgpt-web.retry.delay": { "type": "number", "default": 1000 },
-        "chatgpt-web.selectors.promptTextarea": { "type": "string", "default": "[data-testid=\"prompt-textarea\"]" },
-        "chatgpt-web.selectors.completionIndicator": { "type": "string", "default": "[data-testid=\"regenerate-response-button\"]" },
-        "chatgpt-web.selectors.responseContainer": { "type": "string", "default": "div.markdown" },
-        "chatgpt-web.timeouts.initialLoad": { "type": "number", "default": 20000 },
-        "chatgpt-web.timeouts.response": { "type": "number", "default": 60000 },
-        "chatgpt-web.maxFiles": { "type": "number", "default": 100 }
+        "chatgpt-web.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Chrome/Chromium executable. If empty, Puppeteer tries to find a bundled version or a system-installed Chrome."
+        },
+        "chatgpt-web.headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Launch browser in headless mode. Set to false for debugging or if login is required."
+        },
+        "chatgpt-web.launchArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "--no-sandbox",
+            "--disable-dev-shm-usage"
+          ],
+          "description": "Additional arguments to pass to the browser instance."
+        },
+        "chatgpt-web.retry.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "description": "Maximum number of retries for Puppeteer operations."
+        },
+        "chatgpt-web.retry.delay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Delay (in ms) between retries for Puppeteer operations."
+        },
+        "chatgpt-web.selectors.promptTextarea": {
+          "type": "string",
+          "default": "[data-testid=\"prompt-textarea\"]",
+          "description": "CSS selector for the ChatGPT prompt input textarea."
+        },
+        "chatgpt-web.selectors.completionIndicator": {
+          "type": "string",
+          "default": "[data-testid=\"regenerate-response-button\"]",
+          "description": "CSS selector for an element indicating ChatGPT has finished generating a response (e.g., regenerate button)."
+        },
+        "chatgpt-web.selectors.responseContainer": {
+          "type": "string",
+          "default": "div.markdown",
+          "description": "CSS selector for the container holding ChatGPT's last response (should target a div whose innerHTML is Markdown)."
+        },
+        "chatgpt-web.timeouts.initialLoad": {
+          "type": "number",
+          "default": 30000,
+          "description": "Timeout (in ms) for initial page load and login screen detection."
+        },
+        "chatgpt-web.timeouts.response": {
+          "type": "number",
+          "default": 60000,
+          "description": "Timeout (in ms) for waiting for ChatGPT to respond to a prompt."
+        },
+        "chatgpt-web.maxFiles": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of files to list for the 'getWorkspaceFiles' command."
+        }
       }
     },
     "commands": [
-      { "command": "chatgpt-web.ask", "title": "ChatGPT Web: Ask" },
-      { "command": "chatgpt-web.insert", "title": "ChatGPT Web: Insert" }
+      {
+        "command": "chatgpt-web.ask",
+        "title": "ChatGPT Web: Ask"
+      },
+      {
+        "command": "chatgpt-web.insert",
+        "title": "ChatGPT Web: Insert"
+      }
     ]
   },
   "dependencies": {
-    "puppeteer-core": "^24.8.2",
-    "jsdom": "^22.0.0",
-    "markdown-it": "^13.0.0"
+    "jsdom": "^24.0.0",
+    "markdown-it": "^14.1.0",
+    "puppeteer": "^22.15.0"
   },
   "scripts": {
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "build": "npm install && npm run compile"
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "build": "npm run compile",
+    "test": "jest"
   },
   "devDependencies": {
-    "typescript": "^5.5.2",
-    "@types/node": "^20.14.8",
-    "@types/vscode": "^1.80.0",
+    "@types/jest": "^29.5.14",
     "@types/jsdom": "^21.1.7",
-    "@types/markdown-it": "^13.0.0"
-  }
+    "@types/markdown-it": "^14.0.1",
+    "@types/node": "^20.12.12",
+    "@types/puppeteer": "^5.4.7",
+    "@types/vscode": "^1.89.0",
+    "@typescript-eslint/eslint-plugin": "^7.10.0",
+    "@typescript-eslint/parser": "^7.10.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.4",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onCommand:chatgpt-web.ask",
+    "onCommand:chatgpt-web.insert"
+  ],
+  "displayName": "ChatGPT Web Assistant",
+  "description": "Interact with ChatGPT's web interface directly from VS Code and enable AI-driven VS Code commands."
 }
