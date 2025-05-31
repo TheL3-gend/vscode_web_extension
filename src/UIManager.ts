@@ -26,14 +26,70 @@ export class UIManager implements IUIManager {
     this.outputChannel.appendLine(`[${t}] ${message}`);
     this.outputChannel.show(true);
   }
-  public getUserInput(prompt: string) { return vscode.window.showInputBox({ prompt, ignoreFocusOut: true }); }
+  public getUserInput(prompt: string): Promise<string | undefined> { return Promise.resolve(vscode.window.showInputBox({ prompt, ignoreFocusOut: true })); }
   public showResponseWebview(mdContent: string) {
     const body = this.md.render(mdContent);
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel('chatgptWebResponse','ChatGPT Response',{viewColumn:vscode.ViewColumn.Beside,preserveFocus:true},{enableScripts:false});
       this.panel.onDidDispose(() => this.panel = undefined);
     }
-    this.panel.webview.html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>ChatGPT Response</title></head><body><div>${body}</div></body></html>`;
+    this.panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ChatGPT Response</title>
+    <style>
+        body {
+            font-family: var(--vscode-editor-font-family, var(--vscode-font-family), sans-serif);
+            font-size: var(--vscode-editor-font-size);
+            color: var(--vscode-editor-foreground);
+            background-color: var(--vscode-editor-background);
+            padding: 10px;
+            line-height: 1.6;
+        }
+        pre {
+            background-color: var(--vscode-text-code-block-background, var(--vscode-editor-background)); /* Fallback to editor background */
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: var(--vscode-editor-font-family, var(--vscode-font-family), monospace); /* Ensure monospace for code */
+        }
+        code {
+            font-family: var(--vscode-editor-font-family, var(--vscode-font-family), monospace); /* Ensure monospace for code */
+            background-color: var(--vscode-text-code-block-background, var(--vscode-editor-background)); /* Consistent background for inline code */
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+        pre code { /* Reset padding for code inside pre, as pre handles it */
+            padding: 0;
+        }
+        a {
+            color: var(--vscode-text-link-foreground);
+        }
+        p {
+            margin-top: 0;
+            margin-bottom: 1em;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            font-weight: bold;
+        }
+        ul, ol {
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+        li {
+            margin-bottom: 0.2em;
+        }
+    </style>
+</head>
+<body>
+    <div>${body}</div>
+</body>
+</html>`;
     this.panel.reveal(vscode.ViewColumn.Beside);
   }
   public async insertIntoEditor(text: string) {

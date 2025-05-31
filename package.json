@@ -35,6 +35,9 @@
   },
   "devDependencies": {
     "typescript": "^5.5.2",
-    "@types/node": "^20.14.8"
+    "@types/node": "^20.14.8",
+    "@types/vscode": "^1.80.0",
+    "@types/jsdom": "^21.1.7",
+    "@types/markdown-it": "^13.0.0"
   }
 }
