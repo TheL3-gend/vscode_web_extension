@@ -5,89 +5,112 @@ import { VSCodeCommander } from './VSCodeCommander';
 
 let puppeteerManager: PuppeteerManager;
 let vsCodeCommander: VSCodeCommander;
+let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('ChatGPT Web Extension is now active!');
+    // Create output channel for logging
+    outputChannel = vscode.window.createOutputChannel('ChatGPT Web');
+    outputChannel.appendLine('ChatGPT Web Extension is now active!');
 
-    // Initialize managers
-    puppeteerManager = new PuppeteerManager();
-    vsCodeCommander = new VSCodeCommander();
+    // Disable telemetry for this extension
+    process.env.DISABLE_TELEMETRY = 'true';
 
-    // Register commands
-    let openPanelCommand = vscode.commands.registerCommand('chatgpt-web.openPanel', () => {
-        ChatPanel.createOrShow(context.extensionUri);
-    });
+    try {
+        // Initialize managers
+        puppeteerManager = new PuppeteerManager();
+        vsCodeCommander = new VSCodeCommander();
 
-    let askCommand = vscode.commands.registerCommand('chatgpt-web.ask', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage('No active editor found');
-            return;
-        }
+        // Register commands
+        let openPanelCommand = vscode.commands.registerCommand('chatgpt-web.openPanel', () => {
+            ChatPanel.createOrShow(context.extensionUri);
+        });
 
-        const selection = editor.selection;
-        const text = editor.document.getText(selection);
+        let askCommand = vscode.commands.registerCommand('chatgpt-web.ask', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showErrorMessage('No active editor found');
+                return;
+            }
 
-        if (!text) {
-            vscode.window.showErrorMessage('No text selected');
-            return;
-        }
+            const selection = editor.selection;
+            const text = editor.document.getText(selection);
 
-        try {
-            const response = await puppeteerManager.sendMessage(text);
-            if (ChatPanel.currentPanel) {
-                ChatPanel.currentPanel.postMessage({
-                    command: 'addMessage',
-                    text: response,
-                    sender: 'assistant'
+            if (!text) {
+                vscode.window.showErrorMessage('No text selected');
+                return;
+            }
+
+            try {
+                outputChannel.appendLine('Sending message to ChatGPT...');
+                const response = await puppeteerManager.sendMessage(text);
+                if (ChatPanel.currentPanel) {
+                    ChatPanel.currentPanel.postMessage({
+                        command: 'addMessage',
+                        text: response,
+                        sender: 'assistant'
+                    });
+                }
+                outputChannel.appendLine('Response received successfully');
+            } catch (error: unknown) {
+                outputChannel.appendLine(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                if (error instanceof Error) {
+                    vscode.window.showErrorMessage(`Error: ${error.message}`);
+                } else {
+                    vscode.window.showErrorMessage('An unknown error occurred');
+                }
+            }
+        });
+
+        let insertCommand = vscode.commands.registerCommand('chatgpt-web.insert', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showErrorMessage('No active editor found');
+                return;
+            }
+
+            const selection = editor.selection;
+            const text = editor.document.getText(selection);
+
+            if (!text) {
+                vscode.window.showErrorMessage('No text selected');
+                return;
+            }
+
+            try {
+                outputChannel.appendLine('Sending message to ChatGPT...');
+                const response = await puppeteerManager.sendMessage(text);
+                await editor.edit((editBuilder: vscode.TextEditorEdit) => {
+                    editBuilder.replace(selection, response);
                 });
+                outputChannel.appendLine('Response inserted successfully');
+            } catch (error: unknown) {
+                outputChannel.appendLine(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                if (error instanceof Error) {
+                    vscode.window.showErrorMessage(`Error: ${error.message}`);
+                } else {
+                    vscode.window.showErrorMessage('An unknown error occurred');
+                }
             }
-        } catch (error: unknown) {
-            if (error instanceof Error) {
-                vscode.window.showErrorMessage(`Error: ${error.message}`);
-            } else {
-                vscode.window.showErrorMessage('An unknown error occurred');
-            }
-        }
-    });
+        });
 
-    let insertCommand = vscode.commands.registerCommand('chatgpt-web.insert', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage('No active editor found');
-            return;
-        }
+        // Register view provider
+        const provider = new ChatViewProvider(context.extensionUri);
+        context.subscriptions.push(
+            vscode.window.registerWebviewViewProvider('chatgpt-web.chatView', provider)
+        );
 
-        const selection = editor.selection;
-        const text = editor.document.getText(selection);
+        // Add disposables
+        context.subscriptions.push(
+            openPanelCommand,
+            askCommand,
+            insertCommand,
+            outputChannel
+        );
 
-        if (!text) {
-            vscode.window.showErrorMessage('No text selected');
-            return;
-        }
-
-        try {
-            const response = await puppeteerManager.sendMessage(text);
-            await editor.edit((editBuilder: vscode.TextEditorEdit) => {
-                editBuilder.replace(selection, response);
-            });
-        } catch (error: unknown) {
-            if (error instanceof Error) {
-                vscode.window.showErrorMessage(`Error: ${error.message}`);
-            } else {
-                vscode.window.showErrorMessage('An unknown error occurred');
-            }
-        }
-    });
-
-    // Register view provider
-    const provider = new ChatViewProvider(context.extensionUri);
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider('chatgpt-web.chatView', provider)
-    );
-
-    // Add disposables
-    context.subscriptions.push(openPanelCommand, askCommand, insertCommand);
+    } catch (error: unknown) {
+        outputChannel.appendLine(`Activation error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        vscode.window.showErrorMessage('Failed to activate ChatGPT Web extension');
+    }
 }
 
 interface WebviewMessage {
@@ -120,14 +143,17 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'sendMessage':
                     try {
                         if (data.value) {
+                            outputChannel.appendLine('Sending message from chat panel...');
                             const response = await puppeteerManager.sendMessage(data.value);
                             webviewView.webview.postMessage({
                                 type: 'addMessage',
                                 value: response,
                                 sender: 'assistant'
                             });
+                            outputChannel.appendLine('Response received successfully');
                         }
                     } catch (error: unknown) {
+                        outputChannel.appendLine(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
                         if (error instanceof Error) {
                             webviewView.webview.postMessage({
                                 type: 'error',
@@ -249,5 +275,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 export function deactivate() {
     if (puppeteerManager) {
         puppeteerManager.dispose();
+    }
+    if (outputChannel) {
+        outputChannel.dispose();
     }
 }

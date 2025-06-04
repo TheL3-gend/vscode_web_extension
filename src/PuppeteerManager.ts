@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as puppeteer from 'puppeteer';
 import { IUIManager } from './UIManager';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export interface IPuppeteerManager {
   initialize(): Promise<void>;
@@ -23,8 +25,8 @@ export class PuppeteerManager implements IPuppeteerManager {
   private initialLoadTimeout!: number;
   private responseTimeout!: number;
 
-  private maxRetries!: number;
-  private retryDelay!: number;
+  private maxRetries = 3;
+  private retryDelay = 1000;
 
   private executablePath: string | undefined;
   private headless!: boolean;
@@ -41,9 +43,6 @@ export class PuppeteerManager implements IPuppeteerManager {
     const headlessConfig = cfg.get<boolean>('headless', true);
     this.headless = headlessConfig ? true : false;
     this.launchArgs = cfg.get<string[]>('launchArgs', ['--no-sandbox', '--disable-dev-shm-usage']);
-
-    this.maxRetries = cfg.get<number>('retry.maxRetries', 3);
-    this.retryDelay = cfg.get<number>('retry.delay', 1000);
 
     this.promptTextareaSelector =
       cfg.get<string>('selectors.promptTextarea', '[data-testid="prompt-textarea"]')!;
@@ -76,6 +75,22 @@ export class PuppeteerManager implements IPuppeteerManager {
 
   public isBrowserConnected(): boolean {
     return this.browser?.isConnected() || false;
+  }
+
+  private async wait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  private async retry<T>(operation: () => Promise<T>, retries = this.maxRetries): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (retries > 0) {
+        await this.wait(this.retryDelay);
+        return this.retry(operation, retries - 1);
+      }
+      throw error;
+    }
   }
 
   public async initialize(): Promise<void> {
@@ -113,7 +128,8 @@ export class PuppeteerManager implements IPuppeteerManager {
           ...launchOptions,
           headless: this.headless,
           args: this.launchArgs,
-          ignoreHTTPSErrors: true
+          ignoreHTTPSErrors: true,
+          timeout: this.initialLoadTimeout
         });
         this.browser.on('disconnected', () => {
           this.log('Browser disconnected.', 'warn');
@@ -131,15 +147,47 @@ export class PuppeteerManager implements IPuppeteerManager {
         // Set user agent to avoid detection
         await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        // Enable request interception to handle SSL issues
+        // Set viewport
+        await this.page.setViewport({ width: 1280, height: 800 });
+
+        // Enable request interception
         await this.page.setRequestInterception(true);
-        this.page.on('request', request => {
-          request.continue();
+        
+        // Handle requests
+        this.page.on('request', async request => {
+          try {
+            // Skip certain resource types
+            const resourceType = request.resourceType();
+            if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+              await request.abort();
+              return;
+            }
+
+            // Handle SSL issues
+            if (request.url().startsWith('https://')) {
+              const headers = request.headers();
+              headers['Accept-Encoding'] = 'gzip, deflate, br';
+              headers['Accept-Language'] = 'en-US,en;q=0.9';
+              await request.continue({ headers });
+            } else {
+              await request.continue();
+            }
+          } catch (error) {
+            console.error('Request interception error:', error);
+            await request.continue();
+          }
         });
 
-        await this.page.goto('https://chat.openai.com', {
-          waitUntil: 'networkidle2',
-          timeout: this.initialLoadTimeout,
+        // Handle console messages
+        this.page.on('console', msg => {
+          console.log('Browser console:', msg.text());
+        });
+
+        await this.retry(async () => {
+          await this.page.goto('https://chat.openai.com', {
+            waitUntil: 'networkidle0',
+            timeout: this.initialLoadTimeout,
+          });
         });
         this.log('Navigation successful. Waiting for prompt textarea selector...');
 
@@ -272,12 +320,16 @@ export class PuppeteerManager implements IPuppeteerManager {
 
     try {
       // Wait for the input field and type the message
-      await this.page.waitForSelector('[data-testid="prompt-textarea"]', { timeout: 10000 });
-      await this.page.type('[data-testid="prompt-textarea"]', message);
-      await this.page.keyboard.press('Enter');
+      await this.retry(async () => {
+        await this.page!.waitForSelector('[data-testid="prompt-textarea"]', { timeout: 10000 });
+        await this.page!.type('[data-testid="prompt-textarea"]', message);
+        await this.page!.keyboard.press('Enter');
+      });
 
       // Wait for the response
-      await this.page.waitForSelector('[data-testid="regenerate-response-button"]', { timeout: 60000 });
+      await this.retry(async () => {
+        await this.page!.waitForSelector('[data-testid="regenerate-response-button"]', { timeout: 60000 });
+      });
 
       // Get the response text
       const response = await this.page.evaluate(() => {
@@ -287,6 +339,7 @@ export class PuppeteerManager implements IPuppeteerManager {
 
       return response || 'No response received';
     } catch (error) {
+      console.error('Message sending error:', error);
       if (error instanceof Error) {
         throw new Error(`Failed to send message: ${error.message}`);
       }
