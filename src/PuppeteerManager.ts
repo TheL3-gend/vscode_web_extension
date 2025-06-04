@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import puppeteer, { Browser, Page, LaunchOptions } from 'puppeteer';
+import * as puppeteer from 'puppeteer';
 import { IUIManager } from './UIManager';
 
 export interface IPuppeteerManager {
@@ -11,8 +11,8 @@ export interface IPuppeteerManager {
 }
 
 export class PuppeteerManager implements IPuppeteerManager {
-  private browser: Browser | null = null;
-  private page: Page | null = null;
+  private browser: puppeteer.Browser | null = null;
+  private page: puppeteer.Page | null = null;
   private initialized = false;
   private uiManager?: IUIManager;
 
@@ -104,7 +104,7 @@ export class PuppeteerManager implements IPuppeteerManager {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         this.log(`Initialize attempt ${attempt}/${this.maxRetries}...`);
-        const launchOptions: LaunchOptions = this.executablePath
+        const launchOptions: puppeteer.LaunchOptions = this.executablePath
           ? { executablePath: this.executablePath }
           : {};
 
@@ -248,6 +248,47 @@ export class PuppeteerManager implements IPuppeteerManager {
       }
     } else {
       this.log('Browser was not open or already closed.');
+    }
+  }
+
+  public async sendMessage(message: string): Promise<string> {
+    if (!this.page) {
+      await this.initialize();
+    }
+
+    if (!this.page) {
+      throw new Error('Failed to initialize browser');
+    }
+
+    try {
+      // Wait for the input field and type the message
+      await this.page.waitForSelector('[data-testid="prompt-textarea"]');
+      await this.page.type('[data-testid="prompt-textarea"]', message);
+      await this.page.keyboard.press('Enter');
+
+      // Wait for the response
+      await this.page.waitForSelector('[data-testid="regenerate-response-button"]');
+
+      // Get the response text
+      const response = await this.page.evaluate(() => {
+        const responseElement = document.querySelector('div.markdown');
+        return responseElement ? responseElement.textContent : '';
+      });
+
+      return response || 'No response received';
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to send message: ${error.message}`);
+      }
+      throw new Error('Failed to send message: Unknown error');
+    }
+  }
+
+  public dispose(): void {
+    if (this.browser) {
+      this.browser.close();
+      this.browser = null;
+      this.page = null;
     }
   }
 }

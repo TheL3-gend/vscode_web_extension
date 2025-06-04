@@ -71,14 +71,47 @@
     },
     "commands": [
       {
+        "command": "chatgpt-web.openPanel",
+        "title": "ChatGPT Web: Open Chat Panel",
+        "category": "ChatGPT Web"
+      },
+      {
         "command": "chatgpt-web.ask",
-        "title": "ChatGPT Web: Ask"
+        "title": "ChatGPT Web: Ask",
+        "category": "ChatGPT Web"
       },
       {
         "command": "chatgpt-web.insert",
-        "title": "ChatGPT Web: Insert"
+        "title": "ChatGPT Web: Insert",
+        "category": "ChatGPT Web"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "chatgpt-web-sidebar",
+          "title": "ChatGPT Web",
+          "icon": "resources/chatgpt-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "chatgpt-web-sidebar": [
+        {
+          "type": "webview",
+          "id": "chatgpt-web.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "chatgpt-web.ask",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "dependencies": {
     "jsdom": "^24.0.0",
@@ -111,6 +144,11 @@
     "vscode": "^1.80.0"
   },
   "activationEvents": [
+    "onStartupFinished",
+    "onCommand:chatgpt-web.openPanel",
+    "onCommand:chatgpt-web.ask",
+    "onCommand:chatgpt-web.insert",
+    "onView:chatgpt-web.chatView"
   ],
   "displayName": "ChatGPT Web Assistant",
   "description": "Interact with ChatGPT's web interface directly from VS Code and enable AI-driven VS Code commands."
