@@ -32,13 +32,10 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PuppeteerManager = void 0;
 const vscode = __importStar(require("vscode"));
-const puppeteer_1 = __importDefault(require("puppeteer"));
+const puppeteer = __importStar(require("puppeteer"));
 class PuppeteerManager {
     constructor(uiManager) {
         this.browser = null;
@@ -116,7 +113,7 @@ class PuppeteerManager {
                     ? { executablePath: this.executablePath }
                     : {};
                 // Puppeteer v21+ expects headless as a string ('new' or 'false'), otherwise use boolean for older versions
-                this.browser = await puppeteer_1.default.launch({
+                this.browser = await puppeteer.launch({
                     ...launchOptions,
                     headless: this.headless,
                     args: this.launchArgs,
@@ -236,6 +233,41 @@ class PuppeteerManager {
         }
         else {
             this.log('Browser was not open or already closed.');
+        }
+    }
+    async sendMessage(message) {
+        if (!this.page) {
+            await this.initialize();
+        }
+        if (!this.page) {
+            throw new Error('Failed to initialize browser');
+        }
+        try {
+            // Wait for the input field and type the message
+            await this.page.waitForSelector('[data-testid="prompt-textarea"]');
+            await this.page.type('[data-testid="prompt-textarea"]', message);
+            await this.page.keyboard.press('Enter');
+            // Wait for the response
+            await this.page.waitForSelector('[data-testid="regenerate-response-button"]');
+            // Get the response text
+            const response = await this.page.evaluate(() => {
+                const responseElement = document.querySelector('div.markdown');
+                return responseElement ? responseElement.textContent : '';
+            });
+            return response || 'No response received';
+        }
+        catch (error) {
+            if (error instanceof Error) {
+                throw new Error(`Failed to send message: ${error.message}`);
+            }
+            throw new Error('Failed to send message: Unknown error');
+        }
+    }
+    dispose() {
+        if (this.browser) {
+            this.browser.close();
+            this.browser = null;
+            this.page = null;
         }
     }
 }
