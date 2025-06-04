@@ -23,7 +23,10 @@
           },
           "default": [
             "--no-sandbox",
-            "--disable-dev-shm-usage"
+            "--disable-setuid-sandbox",
+            "--ignore-certificate-errors",
+            "--ignore-certificate-errors-spki-list",
+            "--disable-web-security"
           ],
           "description": "Additional arguments to pass to the browser instance."
         },
@@ -66,6 +69,11 @@
           "type": "number",
           "default": 100,
           "description": "Maximum number of files to list for the 'getWorkspaceFiles' command."
+        },
+        "chatgpt-web.sslVerification": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable SSL certificate verification. Set to false if you're experiencing SSL issues."
         }
       }
     },
@@ -116,7 +124,9 @@
   "dependencies": {
     "jsdom": "^24.0.0",
     "markdown-it": "^14.1.0",
-    "puppeteer": "^22.15.0"
+    "puppeteer": "^22.15.0",
+    "https-proxy-agent": "^7.0.2",
+    "socks-proxy-agent": "^8.0.2"
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

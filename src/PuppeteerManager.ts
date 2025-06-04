@@ -113,6 +113,7 @@ export class PuppeteerManager implements IPuppeteerManager {
           ...launchOptions,
           headless: this.headless,
           args: this.launchArgs,
+          ignoreHTTPSErrors: true
         });
         this.browser.on('disconnected', () => {
           this.log('Browser disconnected.', 'warn');
@@ -126,6 +127,15 @@ export class PuppeteerManager implements IPuppeteerManager {
 
         this.page = await this.browser.newPage();
         this.log('New page created. Navigating to chat.openai.com...');
+
+        // Set user agent to avoid detection
+        await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Enable request interception to handle SSL issues
+        await this.page.setRequestInterception(true);
+        this.page.on('request', request => {
+          request.continue();
+        });
 
         await this.page.goto('https://chat.openai.com', {
           waitUntil: 'networkidle2',
@@ -262,12 +272,12 @@ export class PuppeteerManager implements IPuppeteerManager {
 
     try {
       // Wait for the input field and type the message
-      await this.page.waitForSelector('[data-testid="prompt-textarea"]');
+      await this.page.waitForSelector('[data-testid="prompt-textarea"]', { timeout: 10000 });
       await this.page.type('[data-testid="prompt-textarea"]', message);
       await this.page.keyboard.press('Enter');
 
       // Wait for the response
-      await this.page.waitForSelector('[data-testid="regenerate-response-button"]');
+      await this.page.waitForSelector('[data-testid="regenerate-response-button"]', { timeout: 60000 });
 
       // Get the response text
       const response = await this.page.evaluate(() => {
