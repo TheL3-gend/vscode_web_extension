@@ -184,9 +184,12 @@ export class PuppeteerManager implements IPuppeteerManager {
         });
 
         await this.retry(async () => {
-          await this.page.goto('https://chat.openai.com', {
+          if (!this.page) {
+            throw new Error('Page is null');
+          }
+          await this.page.goto('https://chat.openai.com/', {
             waitUntil: 'networkidle0',
-            timeout: this.initialLoadTimeout,
+            timeout: 30000
           });
         });
         this.log('Navigation successful. Waiting for prompt textarea selector...');
