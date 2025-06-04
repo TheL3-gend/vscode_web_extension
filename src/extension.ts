@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as puppeteer from 'puppeteer';
 import { UIManager, IUIManager } from './UIManager';
 import { PuppeteerManager, IPuppeteerManager } from './PuppeteerManager';
 import { ResponseParser, IResponseParser, ParsedResponse } from './ResponseParser';
@@ -15,6 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
   const askDisposable = vscode.commands.registerCommand('chatgpt-web.ask', async () => {
     try {
       uiManager.showStatusBarMessage('Initializing ChatGPT...', true);
+      // Removed direct puppeteer.launch({ headless: false }) call
       await puppeteerManager.initialize();
 
       const userPrompt = await uiManager.getUserInput('Ask ChatGPT:');
