@@ -156,7 +156,6 @@
   "activationEvents": [
     "onStartupFinished",
     "onCommand:chatgpt-web.openPanel",
-    "onCommand:chatgpt-web.ask",
     "onCommand:chatgpt-web.insert",
     "onView:chatgpt-web.chatView"
   ],

@@ -41,6 +41,8 @@ class PuppeteerManager {
         this.browser = null;
         this.page = null;
         this.initialized = false;
+        this.maxRetries = 3;
+        this.retryDelay = 1000;
         this.uiManager = uiManager;
         this.loadConfiguration();
     }
@@ -50,8 +52,6 @@ class PuppeteerManager {
         const headlessConfig = cfg.get('headless', true);
         this.headless = headlessConfig ? true : false;
         this.launchArgs = cfg.get('launchArgs', ['--no-sandbox', '--disable-dev-shm-usage']);
-        this.maxRetries = cfg.get('retry.maxRetries', 3);
-        this.retryDelay = cfg.get('retry.delay', 1000);
         this.promptTextareaSelector =
             cfg.get('selectors.promptTextarea', '[data-testid="prompt-textarea"]');
         this.completionIndicatorSelector =
@@ -83,6 +83,21 @@ class PuppeteerManager {
     }
     isBrowserConnected() {
         return this.browser?.isConnected() || false;
+    }
+    async wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    async retry(operation, retries = this.maxRetries) {
+        try {
+            return await operation();
+        }
+        catch (error) {
+            if (retries > 0) {
+                await this.wait(this.retryDelay);
+                return this.retry(operation, retries - 1);
+            }
+            throw error;
+        }
     }
     async initialize() {
         if (this.isInitialized()) {
@@ -117,6 +132,8 @@ class PuppeteerManager {
                     ...launchOptions,
                     headless: this.headless,
                     args: this.launchArgs,
+                    ignoreHTTPSErrors: true,
+                    timeout: this.initialLoadTimeout
                 });
                 this.browser.on('disconnected', () => {
                     this.log('Browser disconnected.', 'warn');
@@ -127,9 +144,49 @@ class PuppeteerManager {
                 });
                 this.page = await this.browser.newPage();
                 this.log('New page created. Navigating to chat.openai.com...');
-                await this.page.goto('https://chat.openai.com', {
-                    waitUntil: 'networkidle2',
-                    timeout: this.initialLoadTimeout,
+                // Set user agent to avoid detection
+                await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+                // Set viewport
+                await this.page.setViewport({ width: 1280, height: 800 });
+                // Enable request interception
+                await this.page.setRequestInterception(true);
+                // Handle requests
+                this.page.on('request', async (request) => {
+                    try {
+                        // Skip certain resource types
+                        const resourceType = request.resourceType();
+                        if (['image', 'stylesheet', 'font'].includes(resourceType)) {
+                            await request.abort();
+                            return;
+                        }
+                        // Handle SSL issues
+                        if (request.url().startsWith('https://')) {
+                            const headers = request.headers();
+                            headers['Accept-Encoding'] = 'gzip, deflate, br';
+                            headers['Accept-Language'] = 'en-US,en;q=0.9';
+                            await request.continue({ headers });
+                        }
+                        else {
+                            await request.continue();
+                        }
+                    }
+                    catch (error) {
+                        console.error('Request interception error:', error);
+                        await request.continue();
+                    }
+                });
+                // Handle console messages
+                this.page.on('console', msg => {
+                    console.log('Browser console:', msg.text());
+                });
+                await this.retry(async () => {
+                    if (!this.page) {
+                        throw new Error('Page is null');
+                    }
+                    await this.page.goto('https://chat.openai.com/', {
+                        waitUntil: 'networkidle0',
+                        timeout: 30000
+                    });
                 });
                 this.log('Navigation successful. Waiting for prompt textarea selector...');
                 await this.page.waitForSelector(this.promptTextareaSelector, { timeout: this.initialLoadTimeout });
@@ -244,11 +301,15 @@ class PuppeteerManager {
         }
         try {
             // Wait for the input field and type the message
-            await this.page.waitForSelector('[data-testid="prompt-textarea"]');
-            await this.page.type('[data-testid="prompt-textarea"]', message);
-            await this.page.keyboard.press('Enter');
+            await this.retry(async () => {
+                await this.page.waitForSelector('[data-testid="prompt-textarea"]', { timeout: 10000 });
+                await this.page.type('[data-testid="prompt-textarea"]', message);
+                await this.page.keyboard.press('Enter');
+            });
             // Wait for the response
-            await this.page.waitForSelector('[data-testid="regenerate-response-button"]');
+            await this.retry(async () => {
+                await this.page.waitForSelector('[data-testid="regenerate-response-button"]', { timeout: 60000 });
+            });
             // Get the response text
             const response = await this.page.evaluate(() => {
                 const responseElement = document.querySelector('div.markdown');
@@ -257,6 +318,7 @@ class PuppeteerManager {
             return response || 'No response received';
         }
         catch (error) {
+            console.error('Message sending error:', error);
             if (error instanceof Error) {
                 throw new Error(`Failed to send message: ${error.message}`);
             }
